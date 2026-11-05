@@ -1,22 +1,5 @@
 from typing import Any, Dict, List, Optional
-
-
-def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
-    """欠損値('-', None, 0.0等)を安全にfloatまたはNoneへ変換する"""
-    if val is None:
-        return default
-    if isinstance(val, (int, float)):
-        v = float(val)
-        return v if v > 0.0 else default
-    try:
-        s = str(val).strip()
-        if not s or s in ("-", "None", "null", "0", "0.0"):
-            return default
-        v = float(s)
-        return v if v > 0.0 else default
-    except (ValueError, TypeError):
-        return default
-
+from .utils import _safe_float, _get_st_val, _get_rank_ascending
 
 def _get_st_val(d: Dict[str, Any]) -> float:
     """直前STを優先取得し、欠損時は平均STで代替する"""

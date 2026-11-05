@@ -1,8 +1,8 @@
 from typing import Any, Dict, List
-from logic.development.escape import evaluate_escape_pattern
-from logic.development.kad_attack import evaluate_kad_attack_pattern
-from logic.development.makurisashi import evaluate_makurisashi_pattern
-from logic.development.sashi import evaluate_sashi_pattern
+from logic.tactics.escape import evaluate_escape_pattern
+from logic.tactics.kad_attack import evaluate_kad_attack_pattern
+from logic.tactics.makurisashi import evaluate_makurisashi_pattern
+from logic.tactics.sashi import evaluate_sashi_pattern
 
 
 def analyze_race_development(

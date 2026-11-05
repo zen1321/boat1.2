@@ -1,5 +1,5 @@
 from typing import Any, Dict, List
-from logic.development import analyze_race_development
+from logic.tactics import analyze_race_development
 
 
 def generate_final_betting_recommendation(
