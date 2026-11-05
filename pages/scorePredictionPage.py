@@ -23,8 +23,7 @@ with col_head1:
     st.caption("Webサイトからデータを貼り付けて表に反映し、スコアと順位・買い目を算出します。")
 with col_head2:
     if st.button("⬅️ 番組データ管理画面へ戻る", type="secondary", use_container_width=True):
-        st.switch_page("pages/sub_page01.py")
-
+        st.switch_page("pages/programDataManagementPage.py")
 st.markdown("---")
 
 # ------------------------------------------------------------------------------

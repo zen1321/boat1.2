@@ -20,18 +20,18 @@ if "current_page" not in st.session_state:
     st.session_state.current_page = "sub_page01"
 
 # 各ページオブジェクトの生成（sub_page01 を先に配置）
-sub_page01 = st.Page(
-    BASE_DIR / "pages" / "sub_page01.py",
+program_data_page = st.Page(
+    BASE_DIR / "pages" / "programDataManagementPage.py",
     title="番組データ管理・読込",
     icon="⚙️"
 )
 
-main_page = st.Page(
-    BASE_DIR / "pages" / "main_page.py",
+score_prediction_page = st.Page(
+    BASE_DIR / "pages" / "scorePredictionPage.py",
     title="総合スコア予測",
     icon="🚤"
 )
 
-# ナビゲーションの初期化（サイドバーの自動メニューは非表示）
-pg = st.navigation([sub_page01, main_page], position="hidden")
+# ナビゲーションの初期化
+pg = st.navigation([program_data_page, score_prediction_page], position="hidden")
 pg.run()

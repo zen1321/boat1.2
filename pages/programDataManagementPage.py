@@ -216,7 +216,7 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
 col_nav, _ = st.columns([2, 8])
 with col_nav:
     if st.button("👉 総合スコア予測画面へ移動", type="primary", use_container_width=True):
-        st.switch_page("pages/main_page.py")
+        st.switch_page("pages/scorePredictionPage.py")
 
 st.markdown("---")
 st.title("📄 競艇番組表（公式TXT）➔ JSON 変換 & 出走表確認")
