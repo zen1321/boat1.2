@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from data.racer_course_repository import get_racer_course_stat, get_racer_basic_info
 from data.venue_repository import get_all_venues
-from logic.betting_decision import generate_final_betting_recommendation
+from logic.betting.betting_decision import generate_final_betting_recommendation
 from logic.main_logic import calculate_full_race_scores
 
 # --- タイトル ＆ 管理画面への戻るボタン ---

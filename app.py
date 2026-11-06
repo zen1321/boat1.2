@@ -32,6 +32,13 @@ score_prediction_page = st.Page(
     icon="🚤"
 )
 
+# app.py の抜粋・修正例
+edogawa_page = st.Page(
+    BASE_DIR / "pages" / "edogawaPredictionPage.py",
+    title="江戸川専用予測",
+    icon="🌊"
+)
+
 # ナビゲーションの初期化
-pg = st.navigation([program_data_page, score_prediction_page], position="hidden")
+pg = st.navigation([program_data_page, score_prediction_page, edogawa_page])
 pg.run()
