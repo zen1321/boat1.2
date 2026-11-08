@@ -80,6 +80,9 @@ with col_env4:
     else:
         wave_speed = "強"
 
+# 安定板装着オプションの追加
+is_stabilizer = st.checkbox("⚙️ 安定板装着（当地勝率に1.2倍の補正を適用）", key="edo_is_stabilizer")
+
 edogawa_weather_info = {
     "venue": selected_venue,
     "wind_direction": wind_dir,
@@ -293,7 +296,12 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
             course_score = get_course_score("江戸川", chosen_course)
             
             # 勝率スコアの算出
-            win_score = calculate_win_rate_score(nat_win, loc_win, venue="江戸川")
+            win_score = calculate_win_rate_score(
+                nat_win, 
+                loc_win, 
+                venue="江戸川", 
+                is_stabilizer=edogawa_weather_info.get("is_stabilizer", False)
+            )
             
             # 平均STスコアの算出
             st_score = calculate_avg_st_score(avg_st_val)

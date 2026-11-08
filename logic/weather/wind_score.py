@@ -35,15 +35,3 @@ def calculate_race_wind_scores(
         pit: calculate_wind_score(pit, wind_direction, wind_speed)
         for pit in range(1, 7)
     }
-
-
-# # 動作確認用テスト
-# if __name__ == "__main__":
-#     print("--- 追い風 5m の各艇スコア ---")
-#     print(calculate_race_wind_scores("追い風", 5.0))
-
-#     print("\n--- 向かい風 4m の各艇スコア ---")
-#     print(calculate_race_wind_scores("向かい風", 4.0))
-
-#     print("\n--- 追い風 3m（4m未満） の各艇スコア ---")
-#     print(calculate_race_wind_scores("追い風", 3.0))

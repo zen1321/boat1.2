@@ -36,6 +36,7 @@ def calculate_racer_total_score(
     entry_course: int,
     venue_name: str,
     rank: str = None,
+    is_stabilizer: bool = False,
 ) -> Dict[str, Any]:
     """選手情報に関する基本スコア（小計）を集計する"""
     if rank is None or not str(rank).strip():
@@ -47,6 +48,7 @@ def calculate_racer_total_score(
         national_win_rate=_safe_float_val(national_win_rate),
         local_win_rate=_safe_float_val(local_win_rate),
         venue=venue_name,
+        is_stabilizer=is_stabilizer,
     )
 
     m_score = calculate_motor_score(
@@ -87,6 +89,9 @@ def calculate_full_race_scores(
     if len(race_racers_data) != 6 or len(race_exhibition_data) != 6:
         raise ValueError("6艇分のデータが必要です。")
 
+    # weather_info から安定板フラグを取得（デフォルトはFalse）
+    is_stabilizer = weather_info.get("is_stabilizer", False)
+
     # 1. 各艇の選手基本スコアを算出
     racer_scores_map = {}
     for r_data in race_racers_data:
@@ -100,6 +105,7 @@ def calculate_full_race_scores(
             entry_course=r_data.get("entry_course", pit),
             venue_name=venue_name,
             rank=r_data.get("rank"),
+            is_stabilizer=is_stabilizer,
         )
 
     # 2. 直前展示タイム評価スコアの算出（欠損対応済み）

@@ -14,15 +14,19 @@ CALM_LOCAL_WEIGHT = 0.5
 ROUGH_NATIONAL_WEIGHT = 0.5
 ROUGH_LOCAL_WEIGHT = 1.0
 
+# 安定板装着時の当地勝率補正倍率
+STABILIZER_LOCAL_MULTIPLIER = 1.2
+
 
 def calculate_win_rate_score(
-    national_win_rate: float, local_win_rate: float, venue: str = "多摩川"
+    national_win_rate: float, local_win_rate: float, venue: str = "多摩川", is_stabilizer: bool = False
 ) -> float:
     """全国勝率・当地勝率・水面タイプ（静水/難水）から勝率スコアを算出する
 
     :param national_win_rate: 全国勝率 (例: 6.50)
     :param local_win_rate: 当地勝率 (例: 7.20)
     :param venue: 競艇場名 (例: '江戸川') または 水面タイプ ('静水', '難水')
+    :param is_stabilizer: 安定板装着フラグ (Trueの場合、当地勝率に1.2倍の補正)
     :return: 勝率スコア (float)
     """
     # 当地勝率が0の場合の代用値設定
@@ -31,6 +35,10 @@ def calculate_win_rate_score(
         calc_local_win_rate = float(national_win_rate or 0.0) * LOCAL_ZERO_FALLBACK_RATIO
     else:
         calc_local_win_rate = float(local_win_rate)
+
+    # 安定板装着時の補正（当地勝率に1.2倍）
+    if is_stabilizer:
+        calc_local_win_rate *= STABILIZER_LOCAL_MULTIPLIER
 
     # venueに水面タイプが直接指定されているか、競艇場名が渡されたかを判断
     if venue in ["静水", "難水"]:
@@ -43,7 +51,7 @@ def calculate_win_rate_score(
         score = (national_win_rate * CALM_NATIONAL_WEIGHT) + (calc_local_win_rate * CALM_LOCAL_WEIGHT)
         return round(score, 2)
 
-    # 難水の場合（当地技巧補正を排除し、重み付け計算のみを実施）
+    # 難水の場合
     elif water_type == "難水":
         score = (
             (national_win_rate * ROUGH_NATIONAL_WEIGHT)

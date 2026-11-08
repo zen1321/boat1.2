@@ -31,7 +31,7 @@ st.markdown("---")
 # ------------------------------------------------------------------------------
 st.subheader("⚙️ レース基本設定 & 気象条件")
 
-col_top1, col_top2, col_top3 = st.columns(3)
+col_top1, col_top2, col_top3, col_top4 = st.columns(4)
 
 with col_top1:
     st.markdown("##### 📍 競艇場選択")
@@ -60,10 +60,15 @@ with col_top3:
         "潮の状態", ["なし", "満潮", "干潮", "中潮", "小潮"], index=0
     )
 
+with col_top4:
+    st.markdown("##### ⚙️ 水面コンディション")
+    is_stabilizer = st.checkbox("安定板装着（当地勝率1.2倍）", value=False, key="score_is_stabilizer")
+
 weather_info = {
     "wind_direction": wind_direction,
     "wind_speed": wind_speed,
     "tide_state": tide_state,
+    "is_stabilizer": is_stabilizer,
 }
 
 st.markdown("---")
