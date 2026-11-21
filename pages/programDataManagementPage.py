@@ -299,6 +299,11 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
         )
         selected_venue = venue_options[selected_venue_name]
 
+        # 総合スコア予測画面へ引き継ぐ競艇場名を保存
+        target_venue_name = selected_venue.get("venue_name", "").strip()
+        if target_venue_name:
+            st.session_state["preset_venue_name"] = target_venue_name
+
         # レース選択（テキスト入力を無効化）
         races = selected_venue.get("races", [])
         if not races:

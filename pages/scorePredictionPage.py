@@ -36,7 +36,13 @@ col_top1, col_top2, col_top3, col_top4 = st.columns(4)
 with col_top1:
     st.markdown("##### 📍 競艇場選択")
     venue_list = get_all_venues()
-    default_index = venue_list.index("大村") if "大村" in venue_list else 0
+
+    preset_venue = st.session_state.get("preset_venue_name")
+    if preset_venue and preset_venue in venue_list:
+        default_index = venue_list.index(preset_venue)
+    else:
+        default_index = venue_list.index("大村") if "大村" in venue_list else 0
+
     selected_venue = st.selectbox(
         "競艇場",
         venue_list,
