@@ -54,17 +54,19 @@ with col_top2:
     st.markdown("##### 🌬️ 風条件")
     wind_direction = st.selectbox("風向", ["無風", "追い風", "向かい風"], index=0)
 
-    if wind_direction == "無風":
-        wind_strength = "無風"
+    wind_strength = st.selectbox(
+        "風力",
+        ["無風", "弱風", "強風"],
+        index=0,
+        key="wind_strength_select",
+    )
+
+    if wind_strength == "無風":
         wind_speed = 0.0
+    elif wind_strength == "強風":
+        wind_speed = 5.0
     else:
-        wind_strength = st.selectbox(
-            "風力",
-            ["弱風", "強風"],
-            index=0,
-            key=f"wind_strength_{wind_direction}",
-        )
-        wind_speed = 5.0 if wind_strength == "強風" else 2.0
+        wind_speed = 2.0
 
 with col_top3:
     st.markdown("##### 🌊 潮条件")
