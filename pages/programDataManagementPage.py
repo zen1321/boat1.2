@@ -80,9 +80,12 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
         if current_venue is not None:
             # 会場名取得
             if "ボートレース" in line_raw and not current_venue["venue_name"]:
-                m = re.search(r'ボートレース([^\s]+)', line_raw)
+                m = re.search(r'ボートレース(.+?)(?:\s{2,}|\d{1,2}月|$)', line_raw)
                 if m:
-                    current_venue["venue_name"] = m.group(1).strip()
+                    raw_venue_name = m.group(1)
+                    # 全角・半角スペースを除去して名称を整える
+                    clean_venue_name = re.sub(r'[\s\u3000]+', '', raw_venue_name)
+                    current_venue["venue_name"] = clean_venue_name
 
             # 開催日数
             if "第" in line_raw and "日" in line_raw and not current_venue["day_number"]:
@@ -268,22 +271,45 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
     if not venues:
         st.warning("表示できる競艇場データがありません。")
     else:
-        st.caption(f"開催日: **{event_date}**")
+        date_parts = event_date.split("-")
+        if len(date_parts) == 3:
+            y_str, m_str, d_str = date_parts[0], str(int(date_parts[1])), str(int(date_parts[2]))
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: baseline; gap: 2px; font-size: 1.05rem; font-weight: bold; color: #555;">
+                    <span>開催日:</span>
+                    <span style="font-size: 1.05rem;">{y_str}</span><span style="font-size: 1.05rem;">年</span>
+                    <span style="font-size: 1.05rem;">{m_str}</span><span style="font-size: 1.05rem;">月</span>
+                    <span style="font-size: 1.05rem;">{d_str}</span><span style="font-size: 1.05rem;">日</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(f"<div style='font-size: 1.05rem; font-weight: bold;'>開催日: {event_date}</div>", unsafe_allow_html=True)
 
         col_v, col_r = st.columns(2)
 
-        # 競艇場選択
+        # 競艇場選択（テキスト入力を無効化）
         venue_options = {f"{v.get('venue_name', '不明')} ({v.get('venue_code', '')})": v for v in venues}
-        selected_venue_name = col_v.selectbox("競艇場を選択", list(venue_options.keys()))
+        selected_venue_name = col_v.selectbox(
+            "競艇場を選択",
+            list(venue_options.keys()),
+            filter_mode=None,
+        )
         selected_venue = venue_options[selected_venue_name]
 
-        # レース選択
+        # レース選択（テキスト入力を無効化）
         races = selected_venue.get("races", [])
         if not races:
             st.warning("この競艇場のレースデータはありません。")
         else:
             race_options = {f"第 {r['race_info']['race_number']} レース ({r['race_info']['title']})": r for r in races}
-            selected_race_label = col_r.selectbox("レースを選択", list(race_options.keys()))
+            selected_race_label = col_r.selectbox(
+                "レースを選択",
+                list(race_options.keys()),
+                filter_mode=None,
+            )
             selected_race = race_options[selected_race_label]
 
             # レースタイトルの表示
@@ -327,20 +353,6 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                 df = pd.DataFrame(display_list)
                 st.dataframe(df, use_container_width=True, hide_index=True)
 
-                # コピペ欄（メイン予測画面に貼り付け可能なフォーマット）
-                # st.markdown("#### 📋 データコピペ欄")
-                # st.caption("1行目: 登番（項目名なし） / 2行目: 2連対率 / 3行目: 全国 / 4行目: 当地（タブ区切り）")
-
-                # copy_rows = [
-                #     "\t".join(reg_nos),
-                #     "2連対率\t" + "\t".join(motor_2nds),
-                #     "全国\t" + "\t".join(national_wins),
-                #     "当地\t" + "\t".join(local_wins)
-                # ]
-                # formatted_copy_text = "\n".join(copy_rows)
-
-                # st.text_area("以下をコピーしてご利用ください", value=formatted_copy_text, height=140)
-
                 st.markdown("#### 📋 データコピペ欄")
                 st.caption("1行目: 登番（項目名なし） / 2行目: 2連対率 / 3行目: 全国 / 4行目: 当地（タブ区切り）")
 
@@ -351,8 +363,6 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                     "当地\t" + "\t".join(local_wins)
                 ]
                 formatted_copy_text = "\n".join(copy_rows) + "\n"
-
-                st.text_area("以下をコピーしてご利用ください", value=formatted_copy_text, height=140, key="copy_text_area")
 
                 # --- クリップボードコピーボタン（JavaScript連携） ---
                 # JSON文字列として安全にJavaScriptへ埋め込み
@@ -395,7 +405,9 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                 """
 
                 # HTMLコンポーネントを埋め込み
-                components.html(copy_button_html, height=50)
+                components.html(copy_button_html, height=52)
+
+                st.text_area("以下をコピーしてご利用ください", value=formatted_copy_text, height=140, key="copy_text_area")
                 
             else:
                 st.info("このレースの出走選手データがありません。")
