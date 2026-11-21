@@ -89,6 +89,7 @@ edogawa_weather_info = {
     "wind_speed": wind_speed,
     "tide_direction": tide_dir,
     "wave_speed": wave_speed,
+    "is_stabilizer": is_stabilizer,
 }
 
 st.markdown("---")
@@ -234,9 +235,10 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
 
         # 各艇の展示タイムリスト作成
         ex_times = []
-        for pit_no in range(1, 7):
-            col_data = edited_edo_df[f"{pit_no}号艇"]
-            ex_times.append(safe_float(col_data.get("展示"), 6.70))
+        for i in range(6):
+            chosen_course = updated_edo_courses[i]
+            ex_col_data = edited_edo_df[f"{chosen_course}号艇"]
+            ex_times.append(safe_float(ex_col_data.get("展示"), 6.70))
 
         # 江戸川専用展示評価スコアの算出（タイム速さベース）
         ex_scores = calculate_edogawa_exhibition_scores(
@@ -245,16 +247,19 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
             wind_speed=wind_speed
         )
 
-        # 【追加】展示STスコア用のデータリスト作成
+        # 展示STスコア用のデータリスト作成
         race_st_data = []
-        for pit_no in range(1, 7):
-            col_data = edited_edo_df[f"{pit_no}号艇"]
-            ex_st_val_raw = str(col_data.get("ST", "")).strip()
+        for i in range(6):
+            pit_no = i + 1
+            chosen_course = updated_edo_courses[i]
+            racer_col_data = edited_edo_df[f"{pit_no}号艇"]        # 選手データ（今期ST）は枠番列から
+            ex_col_data = edited_edo_df[f"{chosen_course}号艇"]     # 展示STは進入コース列から
+
+            ex_st_val_raw = str(ex_col_data.get("ST", "")).strip()
             
             # F（フライング）や欠損の判定
             is_f = "f" in ex_st_val_raw.lower() or safe_float(ex_st_val_raw, 0.15) < 0.0
             
-            # 数値変換（Fや"-"の場合は 0.0 や負の値にするなど安全に処理）
             if is_f:
                 ex_st_float = -0.01
             elif ex_st_val_raw == "" or ex_st_val_raw == "-":
@@ -262,8 +267,7 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
             else:
                 ex_st_float = safe_float(ex_st_val_raw, 0.15)
 
-            # 今期平均STの取得
-            avg_st_val = safe_float(col_data.get("今期"), 0.15)
+            avg_st_val = safe_float(racer_col_data.get("今期"), 0.15)
 
             race_st_data.append({
                 "pit_no": pit_no,
@@ -271,7 +275,6 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
                 "avg_st": avg_st_val,
                 "is_flying": is_f
             })
-
         # exhibition_st_score.py を用いた全艇の展示STスコア算出
         ex_st_results = calculate_race_exhibition_st_scores(race_st_data)
         # 艇番(1~6)をキーにした辞書に変換
@@ -316,7 +319,7 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
             ex_eval_score = ex_scores[i]
 
             # 風＋水面スコア（江戸川専用JSON連動）
-            wind_tide_score = water_scores.get(pit_no, 0.0)
+            wind_tide_score = water_scores.get(chosen_course, 0.0)
 
             # 総合スコア合算
             total_score = round(racer_base_subtotal + ex_eval_score + ex_st_score + wind_tide_score, 2)
