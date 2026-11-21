@@ -256,7 +256,7 @@ for pit_no in range(1, 7):
 
     r_id = str(col_data.get("登録番号", "")).strip() or f"400{pit_no}"
     r_name = str(col_data.get("名前", "")).strip() or f"選手{pit_no}"
-    r_rank = str(col_data.get("ランク", "")).strip() or "B1"
+    r_rank = str(col_data.get("ランク", "")).strip() or "B2"
 
     chosen_course = updated_courses[pit_no - 1]
     

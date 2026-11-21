@@ -284,7 +284,7 @@ if st.button("🚀 江戸川専用の予測を実行", type="primary", use_conta
             col_data = edited_edo_df[f"{pit_no}号艇"]
 
             # 各種生データの取得
-            r_rank = str(col_data.get("ランク", "")).strip() or "B1"
+            r_rank = str(col_data.get("ランク", "")).strip() or "B2"
             nat_win = safe_float(col_data.get("全国"), 5.0)
             loc_win = safe_float(col_data.get("当地"), 5.0)
             motor_rate = safe_float(col_data.get("2連対率"), 30.0)

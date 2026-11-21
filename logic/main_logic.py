@@ -41,7 +41,12 @@ def calculate_racer_total_score(
     """選手情報に関する基本スコア（小計）を集計する"""
     if rank is None or not str(rank).strip():
         racer_info = get_racer_by_id(racer_id)
-        rank = racer_info.get("rank", "B1") if racer_info else "B1"
+        fetched_rank = racer_info.get("rank") if racer_info else None
+        rank = (
+            str(fetched_rank).strip()
+            if fetched_rank is not None and str(fetched_rank).strip()
+            else "B2"
+        )
 
     r_score = calculate_rank_score(rank)
     w_score = calculate_win_rate_score(
