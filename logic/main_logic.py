@@ -92,17 +92,27 @@ def calculate_full_race_scores(
     # weather_info から安定板フラグを取得（デフォルトはFalse）
     is_stabilizer = weather_info.get("is_stabilizer", False)
 
-    # 1. 各艇の選手基本スコアを算出
+    # ★ 直前展示データから各艇（pit_no）の進入コースをマッピング（未指定時は枠番 pit_no）
+    actual_course_map = {
+        ex["pit_no"]: int(_safe_float_val(ex.get("entry_course", ex["pit_no"]), ex["pit_no"]))
+        for ex in race_exhibition_data
+    }
+
+    # 1. 各艇の選手基本スコアを算出（変更後の進入コースを反映）
     racer_scores_map = {}
     for r_data in race_racers_data:
         pit = r_data["pit_no"]
+        actual_course = actual_course_map.get(
+            pit,
+            int(_safe_float_val(r_data.get("entry_course", pit), pit)),
+        )
         racer_scores_map[pit] = calculate_racer_total_score(
             racer_id=r_data.get("racer_id", 0),
             national_win_rate=r_data.get("national_win_rate", 0.0),
             local_win_rate=r_data.get("local_win_rate", 0.0),
             motor_rate=r_data.get("motor_rate", 0.0),
             avg_st=r_data.get("avg_st", 0.15),
-            entry_course=r_data.get("entry_course", pit),
+            entry_course=actual_course,
             venue_name=venue_name,
             rank=r_data.get("rank"),
             is_stabilizer=is_stabilizer,
@@ -133,11 +143,11 @@ def calculate_full_race_scores(
         tide_state=weather_info.get("tide_state", "")
     )
 
-    # 6. 最終スコアの合算と構造化
+# 6. 最終スコアの合算と構造化
     final_results = []
     for ex_data in race_exhibition_data:
         pit = ex_data["pit_no"]
-        course = ex_data.get("entry_course", pit)
+        course = int(_safe_float_val(ex_data.get("entry_course", pit), pit))
 
         racer_res = racer_scores_map.get(
             pit, {"total_racer_score": 0.0, "breakdown": {}}
@@ -149,8 +159,9 @@ def calculate_full_race_scores(
             pit, {"exhibition_st_score": 0.0, "ex_st_rank": 6}
         )
 
-        w_score = wind_scores.get(pit, 0.0) if isinstance(wind_scores, dict) else 0.0
-        t_score = tide_scores.get(pit, 0.0) if isinstance(tide_scores, dict) else 0.0
+        # ★ pit ではなく実際の進入コース（course）基準で風・潮スコアを取得
+        w_score = wind_scores.get(course, 0.0) if isinstance(wind_scores, dict) else 0.0
+        t_score = tide_scores.get(course, 0.0) if isinstance(tide_scores, dict) else 0.0
 
         total_score = round(
             racer_res["total_racer_score"]
