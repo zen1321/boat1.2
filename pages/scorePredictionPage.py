@@ -10,7 +10,11 @@ import io
 import os
 import pandas as pd
 import streamlit as st
-from data.racer_course_repository import get_racer_course_stat, get_racer_basic_info
+from data.racer_course_repository import (
+    get_racer_basic_info,
+    get_racer_course_st_avg,
+    get_racer_course_stat,
+)
 from data.venue_repository import get_all_venues
 from logic.betting.betting_decision import generate_final_betting_recommendation
 from logic.main_logic import calculate_full_race_scores
@@ -205,7 +209,12 @@ with col_btn1:
                             st.session_state.grid_df.iloc[name_row_idx, c] = info["name"]
                         if info["rank"]:
                             st.session_state.grid_df.iloc[rank_row_idx, c] = info["rank"]
-                        if info["st_avg"]:
+
+                        # 貼り付け直後は枠番（1〜6コース）に合わせたコース別平均STを優先し、なければ全体平均STを使用
+                        course_st = get_racer_course_st_avg(toban_val, c + 1)
+                        if course_st:
+                            st.session_state.grid_df.iloc[st_row_idx, c] = course_st
+                        elif info["st_avg"]:
                             st.session_state.grid_df.iloc[st_row_idx, c] = info["st_avg"]
 
                 st.success("データを反映し、登番から選手情報（名前・ランク・今期ST）を補完しました！")
@@ -238,6 +247,10 @@ st.markdown("---")
 st.markdown("#### 🧭 進入コース設定")
 st.caption("前付け等のコース変動がある場合は各艇の進入コースを変更してください（初期値は枠番通り）。")
 
+st_row_idx = index_items.index("今期")
+toban_row_idx = index_items.index("登録番号")
+st_updated = False
+
 course_cols = st.columns(6)
 updated_courses = []
 
@@ -251,6 +264,19 @@ for i, col in enumerate(course_cols):
             key=f"entry_course_pit_{pit_no}",
         )
         updated_courses.append(chosen_course)
+
+        prev_course_key = f"_applied_course_pit_{pit_no}"
+        if st.session_state.get(prev_course_key) != chosen_course:
+            st.session_state[prev_course_key] = chosen_course
+            toban_val = str(st.session_state.grid_df.iloc[toban_row_idx, i]).strip()
+            if toban_val:
+                course_st = get_racer_course_st_avg(toban_val, chosen_course)
+                if course_st:
+                    st.session_state.grid_df.iloc[st_row_idx, i] = course_st
+                    st_updated = True
+
+if st_updated:
+    st.rerun()
 
 # ------------------------------------------------------------------------------
 # 3. 入力データからの抽出＆データ整形

@@ -8,7 +8,10 @@ if str(project_root) not in sys.path:
 
 import pandas as pd
 import streamlit as st
-from data.racer_course_repository import get_racer_basic_info
+from data.racer_course_repository import (
+    get_racer_basic_info,
+    get_racer_course_st_avg,
+)
 from data.venue_repository import get_all_venues
 from logic.racer.win_rate_score import calculate_win_rate_score
 
@@ -162,7 +165,12 @@ with col_b1:
                         st.session_state.edo_grid_df.iloc[name_idx, c] = info["name"]
                     if info["rank"]:
                         st.session_state.edo_grid_df.iloc[rank_idx, c] = info["rank"]
-                    if info["st_avg"]:
+
+                    # 貼り付け直後は枠番（1〜6コース）に合わせたコース別平均STを優先
+                    course_st = get_racer_course_st_avg(toban_val, c + 1)
+                    if course_st:
+                        st.session_state.edo_grid_df.iloc[st_idx, c] = course_st
+                    elif info["st_avg"]:
                         st.session_state.edo_grid_df.iloc[st_idx, c] = info["st_avg"]
 
             st.success("データを反映し、選手情報を補完しました！")
@@ -193,11 +201,33 @@ st.markdown("#### 🧭 進入コース設定")
 course_cols = st.columns(6)
 updated_edo_courses = []
 
+st_idx = index_items.index("今期")
+toban_idx = index_items.index("登録番号")
+edo_st_updated = False
+
 for i, col in enumerate(course_cols):
     pit_no = i + 1
     with col:
-        c = st.selectbox(f"{pit_no}号艇", [1, 2, 3, 4, 5, 6], index=pit_no - 1, key=f"edo_course_{pit_no}")
+        c = st.selectbox(
+            f"{pit_no}号艇",
+            [1, 2, 3, 4, 5, 6],
+            index=pit_no - 1,
+            key=f"edo_course_{pit_no}",
+        )
         updated_edo_courses.append(c)
+
+        prev_course_key = f"_edo_applied_course_{pit_no}"
+        if st.session_state.get(prev_course_key) != c:
+            st.session_state[prev_course_key] = c
+            toban_val = str(st.session_state.edo_grid_df.iloc[toban_idx, i]).strip()
+            if toban_val:
+                course_st = get_racer_course_st_avg(toban_val, c)
+                if course_st:
+                    st.session_state.edo_grid_df.iloc[st_idx, i] = course_st
+                    edo_st_updated = True
+
+if edo_st_updated:
+    st.rerun()
 
 # ------------------------------------------------------------------------------
 # 4. 江戸川専用予測の実行

@@ -139,3 +139,25 @@ def get_racer_course_stat(
     except Exception as e:
         print(f"コース成績計算エラー (登番: {racer_id}, コース: {course_no}): {e}")
         return default_res
+
+def get_racer_course_st_avg(
+    racer_id: str, course_no: int, json_path: Union[str, Path] = JSON_PATH
+) -> str:
+    """
+    登番(racer_id)と進入コース番号(course_no)からコース別平均ST(c1_st_avg〜c6_st_avg)を取得し、
+    "0.18" のような文字列形式で返す。取得できない場合は空文字を返す。
+    """
+    racers = _load_racers_data(json_path)
+    racer_key = str(racer_id).strip()
+    c_num = int(course_no)
+
+    if racer_key not in racers or c_num < 1 or c_num > 6:
+        return ""
+
+    racer = racers[racer_key]
+    raw_st = str(racer.get(f"c{c_num}_st_avg", "")).strip()
+    if raw_st.isdigit():
+        st_val = float(raw_st) / 100.0
+        return f"{st_val:.2f}"
+
+    return ""
