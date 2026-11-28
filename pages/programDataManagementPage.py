@@ -8,7 +8,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # プロジェクトルートを Python パスに追加
-project_root = Path(__file__).resolve().parent.parent.parent
+project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
@@ -17,17 +17,72 @@ DATA_JSON_DIR = project_root / "data_json"
 SAVE_PATH = DATA_JSON_DIR / "ProgramSchedule.json"
 
 
+def _to_half_width(text: str) -> str:
+    """全角英数字・記号・スペースを半角へ正規化する"""
+    trans_table = str.maketrans(
+        {
+            **{chr(0xFF10 + i): chr(ord("0") + i) for i in range(10)},
+            **{chr(0xFF21 + i): chr(ord("A") + i) for i in range(26)},
+            **{chr(0xFF41 + i): chr(ord("a") + i) for i in range(26)},
+            "：": ":",
+            "．": ".",
+            "－": "-",
+            "\u3000": " ",
+            "\xa0": " ",
+            "\u00a0": " ",
+        }
+    )
+    return text.translate(trans_table)
+
+
+def _parse_recent_and_early(tail_str: str) -> tuple[list[str], int | None]:
+    """
+    選手行末尾の今節成績と早見（出走予定レース番号）を分離する。
+    形式例:
+      - '14 23 5  8' -> recent=['14', '23', '5'], early=8
+      - '5  11'        -> recent=['5'], early=11
+      - ''             -> recent=[], early=None
+    """
+    cleaned = _to_half_width(tail_str).strip()
+    if not cleaned:
+        return [], None
+
+    tokens = re.findall(r"[0-9A-Za-z]+", cleaned)
+    if not tokens:
+        return [], None
+
+    early_race = None
+    # 末尾トークンが 1〜12 の整数であり、かつ直前に十分な空白（2文字以上）がある場合は早見レース番号とみなす
+    m_trailing_space = re.search(r"(?:\s{2,})(\d{1,2})$", cleaned)
+    if m_trailing_space:
+        cand = int(m_trailing_space.group(1))
+        if 1 <= cand <= 12:
+            early_race = cand
+            cleaned = cleaned[: m_trailing_space.start()].strip()
+            tokens = re.findall(r"[0-9A-Za-z]+", cleaned)
+
+    recent_results: list[str] = []
+    for tok in tokens:
+        # 2文字ずつ分割（例: '14' -> ['14'], '3S' -> ['3S'], '5' -> ['5']）
+        for i in range(0, len(tok), 2):
+            part = tok[i : i + 2].strip()
+            if part:
+                recent_results.append(part)
+
+    return recent_results, early_race
+
+
 def parse_kyotei_txt_fixed(text_content: str) -> dict:
     """
     競艇番組TXTをパースする関数
     構造: 開催 ➔ 日付 ➔ 会場 ➔ レース ➔ レース情報 + 選手6人
     """
-    normalized_content = text_content.replace('\xa0', ' ').replace('\u00a0', ' ').replace(' ', ' ')
+    normalized_content = _to_half_width(text_content)
     lines = normalized_content.splitlines()
-    
+
     event_date = ""
     venues = []
-    
+
     current_venue = None
     current_race = None
     in_entries = False
@@ -35,12 +90,13 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
     # 1. 日付の取得
     for line in lines:
         if "年" in line and "月" in line and "日" in line:
-            m = re.search(r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日', line)
+            m = re.search(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", line)
             if m:
                 y, m_str, d = m.groups()
-                event_date = f"{y}-{int(m_str):02d}-{int(d):02d}"
+                event_date = f"{int(y):04d}-{int(m_str):02d}-{int(d):02d}"
                 break
 
+    # 2. 各行の走査
     for line in lines:
         line_raw = line.rstrip()
         if not line_raw:
@@ -60,7 +116,7 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
                 "venue_name": "",
                 "title": "",
                 "day_number": None,
-                "races": []
+                "races": [],
             }
             current_race = None
             in_entries = False
@@ -80,62 +136,64 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
         if current_venue is not None:
             # 会場名取得
             if "ボートレース" in line_raw and not current_venue["venue_name"]:
-                m = re.search(r'ボートレース(.+?)(?:\s{2,}|\d{1,2}月|$)', line_raw)
+                m = re.search(r"ボートレース(.+?)(?:\s{2,}|\d{1,2}月|$)", line_raw)
                 if m:
-                    raw_venue_name = m.group(1)
-                    # 全角・半角スペースを除去して名称を整える
-                    clean_venue_name = re.sub(r'[\s\u3000]+', '', raw_venue_name)
+                    clean_venue_name = re.sub(r"\s+", "", m.group(1))
                     current_venue["venue_name"] = clean_venue_name
 
             # 開催日数
-            if "第" in line_raw and "日" in line_raw and not current_venue["day_number"]:
-                m = re.search(r'第\s*([０-９0-9]+)\s*日', line_raw)
+            if "第" in line_raw and "日" in line_raw and current_venue["day_number"] is None:
+                m = re.search(r"第\s*(\d+)\s*日", line_raw)
                 if m:
-                    num_str = m.group(1).translate(str.maketrans("０１２３４５６７８９", "0123456789"))
-                    current_venue["day_number"] = int(num_str)
+                    current_venue["day_number"] = int(m.group(1))
 
             # タイトル名
-            if ("杯" in line_raw or "カップ" in line_raw or "記念" in line_raw or "賞" in line_raw or "競走" in line_raw) and "＊＊＊" not in line_raw:
-                if not current_venue["title"] and not line_raw.strip().startswith("ボートレース"):
-                    current_venue["title"] = line_raw.strip()
+            if (
+                any(k in line_raw for k in ["杯", "カップ", "記念", "賞", "競走"])
+                and "***" not in line_raw
+                and not current_venue["title"]
+                and not line_raw.strip().startswith("ボートレース")
+            ):
+                current_venue["title"] = re.sub(r"\s+", " ", line_raw.strip())
 
             # レースヘッダー判定
-            if ("Ｒ" in line_raw or "R" in line_raw) and "電話投票締切予定" in line_raw:
+            if ("R" in line_raw or "Ｒ" in line_raw) and "電話投票締切予定" in line_raw:
                 if current_race:
                     current_venue["races"].append(current_race)
 
-                r_match = re.search(r'([０-９0-9]{1,2})\s*[ＲR]', line_raw)
-                race_num = 0
-                if r_match:
-                    r_str = r_match.group(1).translate(str.maketrans("０１２３４５６７８９", "0123456789"))
-                    race_num = int(r_str)
+                r_match = re.search(r"(\d{1,2})\s*[RＲ]", line_raw)
+                race_num = int(r_match.group(1)) if r_match else 0
 
-                title_match = re.search(r'[ＲR]\s+([^\s]+)', line_raw)
+                title_match = re.search(r"[RＲ]\s+([^\s]+)", line_raw)
                 race_title = title_match.group(1) if title_match else "一般"
 
-                time_match = re.search(r'(\d{1,2}:\d{2}|[０-９]{1,2}：[０-９]{2})', line_raw)
-                closing_time = ""
-                if time_match:
-                    closing_time = time_match.group(1).translate(str.maketrans("０１２３４５６７８９：", "0123456789:"))
+                time_match = re.search(r"(\d{1,2}:\d{2})", line_raw)
+                closing_time = time_match.group(1) if time_match else ""
 
                 current_race = {
                     "race_info": {
                         "race_number": race_num,
                         "title": race_title,
                         "distance_m": 1800,
-                        "telephone_closing_time": closing_time
+                        "telephone_closing_time": closing_time,
                     },
-                    "entries": []
+                    "entries": [],
                 }
                 in_entries = False
                 continue
 
-            # 出走表ヘッダーのスキップ
-            if "艇 選手 選手" in line_raw or "登番" in line_raw:
+            # 出走表ヘッダーのスキップ・開始判定
+            if (
+                "艇 選手 選手" in line_raw
+                or "登番" in line_raw
+                or ("級別" in line_raw and "モーター" in line_raw)
+            ):
                 in_entries = True
                 continue
 
             if line_raw.startswith("----------------") or line_raw.startswith("==="):
+                if current_race:
+                    in_entries = True
                 continue
 
             # 選手データ行の判定と抽出 (1〜6号艇)
@@ -143,48 +201,50 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
                 stripped_line = line_raw.strip()
                 first_char = stripped_line[0] if stripped_line else ""
                 if first_char in ["1", "2", "3", "4", "5", "6"]:
-                    
                     pattern = (
-                        r'^\s*([1-6])\s+'                             # 1:艇番
-                        r'(\d{4})\s*'                                 # 2:登番
-                        r'([^\d]+?)\s*'                               # 3:氏名
-                        r'(\d{2})\s*'                                 # 4:年齢
-                        r'([^\d]+?)\s*'                               # 5:支部
-                        r'(\d{2})\s*'                                 # 6:体重
-                        r'([A-B][1-2])\s+'                            # 7:級別
-                        r'(\d{1,3}\.\d{2})\s*(\d{1,3}\.\d{2})\s*'     # 8:全国勝率, 9:全国2率
-                        r'(\d{1,3}\.\d{2})\s*(\d{1,3}\.\d{2})\s*'     # 10:当地勝率, 11:当地2率
-                        r'(\d+)\s*(\d{1,3}\.\d{2})\s*'                # 12:モーターNO, 13:モーター2率
-                        r'(\d+)\s*(\d{1,3}\.\d{2})\s*'                # 14:ボートNO, 15:ボート2率
-                        r'(.{10,22})?'                                # 16:今節成績および早見（末尾可変長）
+                        r'^\s*([1-6])\s*'
+                        r'(\d{4})\s*'
+                        r'([^\d]+?)\s*'
+                        r'(\d{1,3})\s*'
+                        r'([^\d]+?)\s*'
+                        r'(\d{1,3})\s*'
+                        r'([A-B][1-2])\s*'
+                        r'(\d{1,3}\.\d{2})\s*(\d{1,3}\.\d{2})\s*'
+                        r'(\d{1,3}\.\d{2})\s*(\d{1,3}\.\d{2})\s*'
+                        r'(\d+)\s*(\d{1,3}\.\d{2})\s*'
+                        r'(\d+)\s*(\d{1,3}\.\d{2})\s*'
+                        r'(.*)$'
                     )
-                    
+
                     m = re.match(pattern, line_raw)
                     if m:
                         (
-                            boat_no, reg_no, name, age, branch, weight, rank,
-                            n_win, n_2nd, l_win, l_2nd,
-                            m_no, m_2nd, b_no, b_2nd,
-                            rest_str
+                            boat_no,
+                            reg_no,
+                            name,
+                            age,
+                            branch,
+                            weight,
+                            rank,
+                            n_win,
+                            n_2nd,
+                            l_win,
+                            l_2nd,
+                            m_no,
+                            m_2nd,
+                            b_no,
+                            b_2nd,
+                            rest_str,
                         ) = m.groups()
 
-                        rest_str = rest_str or ""
-                        early_race = None
-                        m_early = re.search(r'(\d{1,2})\s*$', rest_str)
-                        if m_early:
-                            early_race = int(m_early.group(1))
-                            results_part = rest_str[:m_early.start()].strip()
-                        else:
-                            results_part = rest_str.strip()
-
-                        recent_results = [results_part[i:i+2].strip() for i in range(0, len(results_part), 2) if results_part[i:i+2].strip()]
+                        recent_results, early_race = _parse_recent_and_early(rest_str or "")
 
                         entry = {
                             "boat_number": int(boat_no),
                             "registration_number": int(reg_no),
-                            "name": name.strip().replace(" ", ""),
+                            "name": re.sub(r"\s+", "", name),
                             "age": int(age),
-                            "branch": branch.strip().replace(" ", ""),
+                            "branch": re.sub(r"\s+", "", branch),
                             "weight_kg": int(weight),
                             "rank": rank,
                             "national_win_rate": float(n_win),
@@ -196,7 +256,7 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
                             "boat_no": int(b_no),
                             "boat_2nd_rate": float(b_2nd),
                             "recent_results": recent_results,
-                            "early_race_number": early_race
+                            "early_race_number": early_race,
                         }
                         current_race["entries"].append(entry)
 
@@ -208,7 +268,7 @@ def parse_kyotei_txt_fixed(text_content: str) -> dict:
     return {
         "event": {
             "date": event_date,
-            "venues": venues
+            "venues": venues,
         }
     }
 
@@ -231,7 +291,7 @@ parsed_data = None
 
 if uploaded_file is not None:
     raw_bytes = uploaded_file.getvalue()
-    
+
     try:
         content = raw_bytes.decode("cp932")
     except UnicodeDecodeError:
@@ -240,11 +300,8 @@ if uploaded_file is not None:
     parsed_data = parse_kyotei_txt_fixed(content)
 
     os.makedirs(DATA_JSON_DIR, exist_ok=True)
-    
-    try:
-        if SAVE_PATH.exists():
-            os.remove(SAVE_PATH)
 
+    try:
         with open(SAVE_PATH, "w", encoding="utf-8") as f:
             json.dump(parsed_data, f, ensure_ascii=False, indent=2)
         st.success(f"📁 最新のJSONファイルを保存・更新しました: `{SAVE_PATH}`")
@@ -285,6 +342,10 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                 """,
                 unsafe_allow_html=True,
             )
+        #開催日をセッションに保存
+        if event_date:
+            st.session_state["preset_event_date"] = event_date
+
         else:
             st.markdown(f"<div style='font-size: 1.05rem; font-weight: bold;'>開催日: {event_date}</div>", unsafe_allow_html=True)
 
@@ -317,6 +378,12 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
             )
             selected_race = race_options[selected_race_label]
 
+            #開催日をセッションに保存
+            if "selected_race" in locals() and selected_race:
+                race_num = selected_race.get("race_info", {}).get("race_number")
+                if race_num:
+                    st.session_state["preset_race_number"] = int(race_num)
+
             # レースタイトルの表示
             race_info = selected_race["race_info"]
             st.markdown(f"### {selected_venue.get('venue_name')} 第{race_info['race_number']}R ： {race_info['title']}")
@@ -332,23 +399,25 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                 local_wins = []
 
                 for entry in entries:
-                    display_list.append({
-                        "艇番": entry["boat_number"],
-                        "登番": entry["registration_number"],
-                        "選手名": entry["name"],
-                        "級別": entry["rank"],
-                        "年齢": entry["age"],
-                        "支部": entry["branch"],
-                        "全国勝率": entry["national_win_rate"],
-                        "全国2連率": entry["national_2nd_rate"],
-                        "当地勝率": entry["local_win_rate"],
-                        "当地2連率": entry["local_2nd_rate"],
-                        "モーターNO": entry["motor_no"],
-                        "モーター2連率": entry["motor_2nd_rate"],
-                        "ボートNO": entry["boat_no"],
-                        "ボート2連率": entry["boat_2nd_rate"],
-                        "今節成績": " ".join(entry["recent_results"])
-                    })
+                    display_list.append(
+                        {
+                            "艇番": entry["boat_number"],
+                            "登番": entry["registration_number"],
+                            "選手名": entry["name"],
+                            "級別": entry["rank"],
+                            "年齢": entry["age"],
+                            "支部": entry["branch"],
+                            "全国勝率": entry["national_win_rate"],
+                            "全国2連率": entry["national_2nd_rate"],
+                            "当地勝率": entry["local_win_rate"],
+                            "当地2連率": entry["local_2nd_rate"],
+                            "モーターNO": entry["motor_no"],
+                            "モーター2連率": entry["motor_2nd_rate"],
+                            "ボートNO": entry["boat_no"],
+                            "ボート2連率": entry["boat_2nd_rate"],
+                            "今節成績": " ".join(entry["recent_results"]),
+                        }
+                    )
 
                     reg_nos.append(str(entry["registration_number"]))
                     motor_2nds.append(str(entry["motor_2nd_rate"]))
@@ -365,12 +434,11 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                     "\t".join(reg_nos),
                     "2連対率\t" + "\t".join(motor_2nds),
                     "全国\t" + "\t".join(national_wins),
-                    "当地\t" + "\t".join(local_wins)
+                    "当地\t" + "\t".join(local_wins),
                 ]
                 formatted_copy_text = "\n".join(copy_rows) + "\n"
 
                 # --- クリップボードコピーボタン（JavaScript連携） ---
-                # JSON文字列として安全にJavaScriptへ埋め込み
                 js_copy_text = json.dumps(formatted_copy_text)
 
                 copy_button_html = f"""
@@ -409,10 +477,9 @@ if parsed_data and "event" in parsed_data and "venues" in parsed_data["event"]:
                 </script>
                 """
 
-                # HTMLコンポーネントを埋め込み
                 components.html(copy_button_html, height=52)
 
                 st.text_area("以下をコピーしてご利用ください", value=formatted_copy_text, height=140, key="copy_text_area")
-                
+
             else:
                 st.info("このレースの出走選手データがありません。")

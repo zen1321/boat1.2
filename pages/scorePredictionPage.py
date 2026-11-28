@@ -18,6 +18,14 @@ from data.racer_course_repository import (
 from data.venue_repository import get_all_venues
 from logic.betting.betting_decision import generate_final_betting_recommendation
 from logic.main_logic import calculate_full_race_scores
+#結果スナップショット用追加
+from datetime import date
+import streamlit as st
+from logic.snapshot_exporter import (
+    build_prediction_snapshot,
+    build_snapshot_filename,
+    snapshot_to_json_bytes,
+)
 
 # --- タイトル ＆ 管理画面への戻るボタン ---
 st.title("🚤 ボートレース総合スコア予測")
@@ -88,6 +96,36 @@ weather_info = {
     "tide_state": tide_state,
     "is_stabilizer": is_stabilizer,
 }
+
+# 番組表ページからの引き継ぎ（一度だけ取得してウィジェットの session_state に反映）
+preset_date_str = st.session_state.pop("preset_event_date", None)
+if preset_date_str:
+    try:
+        st.session_state["snapshot_race_date"] = date.fromisoformat(preset_date_str)
+    except ValueError:
+        pass
+
+preset_race_no = st.session_state.pop("preset_race_number", None)
+if preset_race_no in list(range(1, 13)):
+    st.session_state["snapshot_race_no"] = int(preset_race_no)
+
+# 画面上部のレース設定エリア（既存の設定と並べて配置）
+col_date, col_race = st.columns([1, 1])
+with col_date:
+    selected_date = st.date_input(
+        "開催日",
+        value=st.session_state.get("snapshot_race_date", date.today()),
+        key="snapshot_race_date",
+    )
+with col_race:
+    selected_race_no = st.selectbox(
+        "レース番号",
+        options=list(range(1, 13)),
+        index=list(range(1, 13)).index(st.session_state.get("snapshot_race_no", 1)),
+        format_func=lambda r: f"{r}R",
+        key="snapshot_race_no",
+    )
+
 
 st.markdown("---")
 
@@ -528,5 +566,63 @@ if st.button("🚀 レーススコア予測を実行", type="primary", use_conta
 
         st.dataframe(styled_course_df, use_container_width=True, hide_index=True)
 
+        # --- 予想スナップショットの生成・セッション保存 ---
+        predictions_payload = []
+        for r in results:
+            pit = r["pit_no"]
+            racer_item = next((item for item in racers_data if item["pit_no"] == pit), {})
+            ex_item = next((item for item in exhibition_data if item["pit_no"] == pit), {})
+            predictions_payload.append(
+                {
+                    "predicted_rank": r["predicted_rank"],
+                    "pit_no": pit,
+                    "entry_course": r["entry_course"],
+                    "racer_id": racer_item.get("racer_id", ""),
+                    "racer_name": racer_item.get("racer_name", ""),
+                    "rank": racer_item.get("rank", ""),
+                    "total_score": r["total_score"],
+                    "score_breakdown": r.get("score_breakdown", {}),
+                    "exhibition_time": ex_item.get("exhibition_time"),
+                    "exhibition_st": ex_item.get("exhibition_st"),
+                    "is_flying": ex_item.get("is_flying", False),
+                }
+            )
+
+        betting_payload = {
+            "primary_development": bet_recommendation.get("primary_development"),
+            "development_rank": bet_recommendation.get("development_rank"),
+            "confidence": bet_recommendation.get("confidence"),
+            "betting_policy": bet_recommendation.get("betting_policy"),
+            "recommended_bets": bet_recommendation.get("recommended_bets", []),
+        }
+
+        snapshot = build_prediction_snapshot(
+            venue_name=selected_venue,
+            race_no=selected_race_no,
+            logic_type="standard",
+            weather_info=weather_info,
+            predictions=predictions_payload,
+            betting_info=betting_payload,
+            race_date=selected_date.strftime("%Y-%m-%d"),
+        )
+        st.session_state["latest_prediction_snapshot"] = snapshot
+
     except Exception as e:
         st.error(f"計算エラーが発生しました: {e}")
+
+# --- 予想スナップショット（JSON）ダウンロードエリア ---
+if "latest_prediction_snapshot" in st.session_state:
+    snap = st.session_state["latest_prediction_snapshot"]
+    st.markdown("---")
+    st.subheader("📤 予想スナップショット出力（JSON）")
+    st.caption(
+        f"保存対象: {snap['race_info']['date']} / {snap['race_info']['venue_name']} "
+        f"{snap['race_info']['race_no']}R（ロジック: {snap['logic_type']}）"
+    )
+    st.download_button(
+        label="📥 JSONファイルをダウンロード",
+        data=snapshot_to_json_bytes(snap),
+        file_name=build_snapshot_filename(snap),
+        mime="application/json",
+        key="download_prediction_snapshot_json",
+    )
